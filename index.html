@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Météo — Dashboard Temps Réel</title>
+  <meta name="description" content="Météo temps réel: prévisions horaires 10 jours, humidité, vent, pluie, icônes, recherche de ville, graphique interactif." />
+  <style>
+    :root{
+      --bg:#0b1220; --card:#111827; --muted:#9CA3AF; --text:#E5E7EB; --accent:#2563eb;
+      --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --grid:#1f2937; --chip:#0b1a33;
+      --t:#ef4444; --h:#10b981; --w:#60A5FA; --p:#93c5fd;
+    }
+    :root.light{
+      --bg:#f6f7fb; --card:#ffffff; --muted:#6b7280; --text:#0f172a; --accent:#1e40af;
+      --ok:#047857; --warn:#b45309; --bad:#b91c1c; --grid:#e5e7eb; --chip:#eef2ff;
+      --t:#dc2626; --h:#059669; --w:#2563eb; --p:#3b82f6;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font:16px/1.4 system-ui,Segoe UI,Roboto,Arial,sans-serif;
+      color:var(--text);
+      background: radial-gradient(1200px 800px at 20% -10%, #0f172a 0%, var(--bg) 60%, #090f1a 100%);
+    }
+    :root.light body{background:#f5f7fb}
+
+    .header{padding:16px 20px;border-bottom:1px solid var(--grid);display:flex;flex-direction:column;gap:12px}
+    .row{display:flex;align-items:center;gap:10px}
+    .wrap{flex-wrap:wrap}
+    .between{justify-content:space-between}
+    .gap{gap:16px}
+    .brand{display:flex;align-items:center;gap:10px}
+    .logo{width:28px;height:28px}
+    .toolbar{display:flex;gap:8px}
+    .btn{background:var(--card);color:var(--text);border:1px solid var(--grid);border-radius:10px;padding:8px 10px;cursor:pointer}
+    .btn:hover{border-color:#263244}
+
+    .search{position:relative;min-width:280px;flex:1}
+    .input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--grid);background:var(--card);color:var(--text)}
+    .results{position:absolute;top:44px;left:0;right:0;background:var(--card);border:1px solid var(--grid);border-radius:12px;max-height:260px;overflow:auto;display:none;z-index:10}
+    .result{padding:10px 12px;border-bottom:1px solid var(--grid);cursor:pointer}
+    .result:hover{background:rgba(37,99,235,0.12)}
+    .result:last-child{border-bottom:0}
+
+    .now{display:flex;justify-content:space-between;align-items:center;gap:16px;flex:1;min-width:320px}
+    .now-left{display:flex;align-items:center;gap:12px}
+    .now-icon svg,.now-icon use{width:44px;height:44px}
+    .now-desc{font-weight:600}
+    .now-time{color:var(--muted);font-size:14px}
+    .now-right{display:flex;gap:18px;align-items:flex-end}
+    .stat{display:flex;align-items:baseline;gap:6px}
+    .big{font-size:42px;font-weight:700}
+    .unit{color:var(--muted);font-size:14px}
+
+    .container{max-width:1100px;margin:20px auto;padding:0 16px;display:flex;flex-direction:column;gap:22px}
+    h2{margin:0 0 10px 0;font-size:18px}
+    .days-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+    .day-card{
+      background:linear-gradient(180deg,#0f172a 0%,var(--bg) 100%);
+      border:1px solid var(--grid); border-radius:14px; padding:12px; cursor:pointer;
+      display:flex;flex-direction:column;gap:8px; transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    :root.light .day-card{background:var(--card)}
+    .day-card:hover{transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.15); border-color:#263244}
+    .day-top{display:flex;justify-content:space-between;align-items:center}
+    .day-title{font-weight:600}
+    .day-icon svg{width:28px;height:28px}
+    .day-temps{display:flex;justify-content:space-between; gap:8px; font-size:14px}
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+    .badge .dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+    .dot.blue{background:#60A5FA}
+    .dot.green{background:#10b981}
+
+    .hourly-section{display:flex;flex-direction:column;gap:10px}
+    .hourly-header{display:flex;justify-content:space-between;align-items:end}
+    .updated{color:var(--muted);font-size:12px}
+
+    .chart-card{background:var(--card);border:1px solid var(--grid);border-radius:14px;padding:10px}
+    .chart{width:100%;height:280px;position:relative}
+    .chart svg{width:100%;height:100%}
+    .chart-toolbar{display:flex;gap:12px;margin:0 0 8px 4px;flex-wrap:wrap}
+    .legend{margin-left:auto;font-size:12px;color:var(--muted)}
+    .legend .l{display:inline-flex;align-items:center;margin-left:10px}
+    .legend .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+    .legend .d-t{background:var(--t)} .legend .d-h{background:var(--h)} .legend .d-w{background:var(--w)} .legend .d-p{background:var(--p)}
+
+    .tooltip{
+      position:absolute; pointer-events:none; background:rgba(17,24,39,.95);
+      color:#e5e7eb; border:1px solid #334155; border-radius:10px; padding:8px 10px; font-size:12px;
+      transform:translate(-50%, -120%); white-space:nowrap; display:none; z-index:2;
+    }
+    :root.light .tooltip{background:#ffffff;color:#0f172a;border-color:#e5e7eb}
+
+    .hours-strip{
+      display:grid;grid-auto-flow:column;grid-auto-columns:minmax(140px, 1fr);
+      gap:10px; overflow-x:auto; padding-bottom:6px; scrollbar-color:#334155 var(--bg);
+    }
+    .hour{
+      background:linear-gradient(180deg,#0f172a 0%,var(--bg) 100%);
+      border:1px solid var(--grid); border-radius:14px; padding:10px;
+      display:flex;flex-direction:column;gap:8px; min-height:120px;
+    }
+    :root.light .hour{background:var(--card)}
+    .hour-top{display:flex;justify-content:space-between;align-items:center}
+    .hour-title{font-size:14px}
+    .hour-icon svg{width:26px;height:26px}
+    .row{display:flex;justify-content:space-between;font-size:13px}
+    .row small{color:var(--muted)}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{background:var(--chip);border:1px solid var(--grid);border-radius:999px;padding:3px 8px;font-size:12px}
+
+    .footer{padding:16px 20px;color:var(--muted);font-size:12px;border-top:1px solid var(--grid);margin-top:10px}
+
+    .skeleton{background:linear-gradient(90deg,#101827 25%,#0f1b35 37%,#101827 63%);background-size:400% 100%;animation:shimmer 1.2s infinite}
+    @keyframes shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+  </style>
+</head>
+<body>
+<header class="header">
+  <div class="row between wrap">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#2563eb"/></svg>
+      <h1 id="city-title">Rabat, MA — Weather Dashboard</h1>
+    </div>
+    <div class="toolbar">
+      <button id="theme-toggle" class="btn" aria-label="Basculer thème">🌙</button>
+    </div>
+  </div>
+
+  <div class="row wrap gap">
+    <!-- Recherche ville -->
+    <div class="search">
+      <input id="q" class="input" type="search" placeholder="🔎 Rechercher une ville (ex: Rabat, Paris, Madrid…)" autocomplete="off" />
+      <div id="results" class="results" role="listbox" aria-label="Résultats de recherche"></div>
+    </div>
+
+    <!-- Conditions actuelles -->
+    <div class="now">
+      <div class="now-left">
+        <div id="now-icon" class="now-icon" aria-hidden="true"></div>
+        <div>
+          <div id="now-desc" class="now-desc">—</div>
+          <div id="now-time" class="now-time">—</div>
+        </div>
+      </div>
+      <div class="now-right">
+        <div class="stat"><span id="now-temp" class="big">—</span><span class="unit">°C</span></div>
+        <div class="stat"><span id="now-humi">—</span><span class="unit">%</span> <small>humidité</small></div>
+        <div class="stat"><span id="now-wind">—</span><span class="unit">km/h</span> <small>vent</small></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section>
+    <h2>Prochains 10 jours (aperçu)</h2>
+    <div id="days" class="days-grid" role="list" aria-label="Prévisions quotidiennes"></div>
+  </section>
+
+  <section class="hourly-section">
+    <div class="hourly-header">
+      <h2 id="hourly-title">Prévision horaire du jour</h2>
+      <div id="last-update" class="updated">—</div>
+    </div>
+
+    <!-- Graphique -->
+    <div class="chart-card">
+      <div class="chart-toolbar">
+        <label class="tog"><input type="checkbox" id="s-temp" checked> Température</label>
+        <label class="tog"><input type="checkbox" id="s-humi" checked> Humidité</label>
+        <label class="tog"><input type="checkbox" id="s-wind" checked> Vent</label>
+        <label class="tog"><input type="checkbox" id="s-prec" checked> Pluie (%)</label>
+        <div class="legend">
+          <span class="l"><span class="dot d-t"></span>Temp</span>
+          <span class="l"><span class="dot d-h"></span>Hum</span>
+          <span class="l"><span class="dot d-w"></span>Vent</span>
+          <span class="l"><span class="dot d-p"></span>Pluie</span>
+        </div>
+      </div>
+      <div class="chart" id="chart" role="img" aria-label="Météogramme interactif">
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+    </div>
+
+    <!-- Bandes horaires -->
+    <div id="hours" class="hours-strip" aria-live="polite" aria-busy="true"></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <small>Source : Open‑Meteo (API publique, sans clé). Horaires localisés automatiquement selon la ville.</small>
+</footer>
+
+<!-- Sprite d’icônes minimal -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="i-clear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="#FDB813"/><g stroke="#FDB813" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/><line x1="4.2" y1="4.2" x2="6.9" y2="6.9"/><line x1="17.1" y1="17.1" x2="19.8" y2="19.8"/><line x1="4.2" y1="19.8" x2="6.9" y2="17.1"/><line x1="17.1" y1="6.9" x2="19.8" y2="4.2"/></g></symbol>
+  <symbol id="i-partly" viewBox="0 0 24 24">#i-clear<g transform="translate(5,10)"><path d="M3 7h10a4 4 0 0 0-7.5-2A3.5 3.5 0 0 0 3 7z" fill="#9CA3AF"/></g></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6 18h10a4 4 0 1 0-1-7.874A5.5 5.5 0 0 0 6 9a5 5 0 0 0 0 9z" fill="#9CA3AF"/></symbol>
+  <symbol id="i-fog" viewBox="0 0 24 24">#i-cloud<g stroke="#9CA3AF" stroke-width="2" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="20"/><line x1="2" y1="22" x2="18" y2="22"/></g></symbol>
+  <symbol id="i-drizzle" viewBox="0 0 24 24">#i-cloud<g fill="#60A5FA"><circle cx="9" cy="20" r="1"/><circle cx="13" cy="21" r="1"/><circle cx="17" cy="20" r="1"/></g></symbol>
+  <symbol id="i-rain" viewBox="0 0 24 24">#i-cloud<g stroke="#60A5FA" stroke-width="2" stroke-linecap="round"><line x1="8" y1="20" x2="7" y2="23"/><line x1="12" y1="20" x2="11" y2="23"/><line x1="16" y1="20" x2="15" y2="23"/></g></symbol>
+  <symbol id="i-snow" viewBox="0 0 24 24">#i-cloud<g stroke="#93C5FD" stroke-width="2" stroke-linecap="round"><line x1="8" y1="20" x2="8" y2="23"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="16" y1="20" x2="16" y2="23"/><line x1="7" y1="21.5" x2="9" y2="21.5"/><line x1="11" y1="21.5" x2="13" y2="21.5"/><line x1="15" y1="21.5" x2="17" y2="21.5"/></g></symbol>
+  <symbol id="i-storm" viewBox="0 0 24 24">#i-cloud<polygon points="11,19 8,19 12,13 10,13 13,9 16,9 13,14 15,14" fill="#F59E0B"/></symbol>
+</svg>
+
+<script>
+  // ========= ÉTAT =========
+  let STATE = {
+    lat: 34.020882, lon: -6.841650, city: 'Rabat, MA',
+    tz: 'Africa/Casablanca', days: 10
+  };
+
+  // ========= Sélecteurs =========
+  const $ = (s) => document.querySelector(s);
+  const daysEl = $('#days'), hoursEl = $('#hours'), chartEl = $('#chart'), tipEl = $('#tooltip');
+  const nowIcon = $('#now-icon'), nowDesc = $('#now-desc'), nowTime = $('#now-time');
+  const nowTemp = $('#now-temp'), nowHumi = $('#now-humi'), nowWind = $('#now-wind');
+  const lastUpd = $('#last-update'), hourlyTitle = $('#hourly-title'), cityTitle = $('#city-title');
+  const q = $('#q'), results = $('#results');
+  const themeToggle = $('#theme-toggle');
+  const sTemp = $('#s-temp'), sHumi = $('#s-humi'), sWind = $('#s-wind'), sPrec = $('#s-prec');
+
+  // ========= WMO -> libellé + icône =========
+  const WMO = {
+    0:{t:'Ciel clair',i:'i-clear'}, 1:{t:'Plutôt clair',i:'i-partly'}, 2:{t:'Partiellement nuageux',i:'i-partly'}, 3:{t:'Couvert',i:'i-cloud'},
+    45:{t:'Brouillard',i:'i-fog'}, 48:{t:'Brouillard givrant',i:'i-fog'},
+    51:{t:'Bruine légère',i:'i-drizzle'}, 53:{t:'Bruine',i:'i-drizzle'}, 55:{t:'Bruine forte',i:'i-drizzle'},
+    56:{t:'Bruine verglaçante',i:'i-drizzle'}, 57:{t:'Bruine verglaçante forte',i:'i-drizzle'},
+    61:{t:'Pluie faible',i:'i-rain'}, 63:{t:'Pluie',i:'i-rain'}, 65:{t:'Pluie forte',i:'i-rain'},
+    66:{t:'Pluie verglaçante',i:'i-rain'}, 67:{t:'Pluie verglaçante forte',i:'i-rain'},
+    71:{t:'Neige faible',i:'i-snow'}, 73:{t:'Neige',i:'i-snow'}, 75:{t:'Neige forte',i:'i-snow'}, 77:{t:'Grains de neige',i:'i-snow'},
+    80:{t:'Averses faibles',i:'i-rain'}, 81:{t:'Averses',i:'i-rain'}, 82:{t:'Averses fortes',i:'i-rain'},
+    85:{t:'Averses de neige faibles',i:'i-snow'}, 86:{t:'Averses de neige fortes',i:'i-snow'},
+    95:{t:'Orages',i:'i-storm'}, 96:{t:'Orages avec grêle',i:'i-storm'}, 99:{t:'Orages violents avec grêle',i:'i-storm'}
+  };
+  const fmtDate=(iso,opts={dateStyle:'medium',timeZone:STATE.tz})=>new Intl.DateTimeFormat('fr-FR',opts).format(new Date(iso));
+  const fmtTime=(iso)=>new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',minute:'2-digit',timeZone:STATE.tz}).format(new Date(iso));
+  const icon=(id,cls='')=>`<svg class="\${cls}" viewBox="0 0 24 24" aria-hidden="true">#\${id}</use></svg>`;
+  const desc=(c)=>WMO[c]?.t??`Code \${c}`; const iconId=(c)=>WMO[c]?.i??'i-cloud';
+  const setBusy=(el,b=true)=>b?el.setAttribute('aria-busy','true'):el.removeAttribute('aria-busy');
+
+  // ========= API =========
+  function forecastURL(lat,lon){
+    const u = new URL('https://api.open-meteo.com/v1/forecast');
+    u.searchParams.set('latitude', lat);
+    u.searchParams.set('longitude', lon);
+    u.searchParams.set('timezone', 'auto'); // on adopte la timezone renvoyée
+    u.searchParams.set('wind_speed_unit','kmh');
+    u.searchParams.set('forecast_days', STATE.days.toString());
+    u.searchParams.set('current', ['temperature_2m','relative_humidity_2m','wind_speed_10m','is_day','weathercode'].join(','));
+    u.searchParams.set('hourly', ['temperature_2m','relative_humidity_2m','wind_speed_10m','weathercode','precipitation_probability'].join(','));
+    u.searchParams.set('daily', ['weathercode','temperature_2m_max','temperature_2m_min','precipitation_probability_max','wind_speed_10m_max','sunrise','sunset'].join(','));
+    return u.toString();
+  }
+  function geocodeURL(query){
+    const u = new URL('https://geocoding-api.open-meteo.com/v1/search');
+    u.searchParams.set('name', query);
+    u.searchParams.set('count','8');
+    u.searchParams.set('language','fr');
+    return u.toString();
+  }
+
+  // ========= Données =========
+  let DATA=null, CURRENT_YMD=null;
+
+  // ========= Rendu =========
+  function renderNow(d){
+    const c = d.current;
+    nowIcon.innerHTML = icon(iconId(c.weathercode),'now-icon-svg');
+    nowDesc.textContent = desc(c.weathercode);
+    nowTemp.textContent = Math.round(c.temperature_2m??0);
+    nowHumi.textContent = Math.round(c.relative_humidity_2m??0);
+    nowWind.textContent = Math.round(c.wind_speed_10m??0);
+    nowTime.textContent = `Mis à jour \${fmtDate(c.time,{dateStyle:'medium',timeStyle:'short',timeZone:STATE.tz})}`;
+  }
+
+  function renderDays(d){
+    const { daily } = d;
+    daysEl.innerHTML = '';
+    daily.time.forEach((dateISO, i)=>{
+      const card = document.createElement('button');
+      card.type='button'; card.className='day-card';
+      card.innerHTML = `
+        <div class="day-top">
+          <div class="day-title">\${fmtDate(dateISO,{weekday:'short',day:'2-digit',month:'short',timeZone:STATE.tz})}</div>
+          <div class="day-icon">\${icon(iconId(daily.weathercode[i]))}</div>
+        </div>
+        <div class="day-temps">
+          <div><strong>\${Math.round(daily.temperature_2m_max[i])}°</strong> / <span style="color:#94a3b8">\${Math.round(daily.temperature_2m_min[i])}°</span></div>
+          <div class="badge"><span class="dot blue"></span>\${daily.precipitation_probability_max?.[i] ?? '—'}%</div>
+        </div>
+        <div class="badge"><span class="dot green"></span> Vent max \${daily.wind_speed_10m_max?.[i] ?? '—'} km/h</div>
+      `;
+      card.addEventListener('click', ()=>{
+        document.querySelectorAll('.day-card').forEach(x=>x.style.outline='none');
+        card.style.outline=`2px solid var(--accent)`;
+        CURRENT_YMD = dateISO.slice(0,10);
+        renderHoursFor(CURRENT_YMD, d);
+        hourlyTitle.textContent = `Prévision horaire — \${fmtDate(dateISO,{weekday:'long',day:'2-digit',month:'long',timeZone:STATE.tz})}`;
+        renderChartFor(CURRENT_YMD, d);
+      });
+      daysEl.appendChild(card);
+    });
+
+    // Sélection par défaut
+    CURRENT_YMD = daily.time[0].slice(0,10);
+    hourlyTitle.textContent = `Prévision horaire — \${fmtDate(daily.time[0],{weekday:'long',day:'2-digit',month:'long',timeZone:STATE.tz})}`;
+    renderHoursFor(CURRENT_YMD, d);
+    renderChartFor(CURRENT_YMD, d);
+  }
+
+  function renderHoursFor(ymd,d){
+    setBusy(hoursEl,true);
+    const { hourly } = d;
+    const out=[];
+    for(let i=0;i<hourly.time.length;i++){
+      const t=hourly.time[i]; if(!t.startsWith(ymd)) continue;
+      const temp=Math.round(hourly.temperature_2m[i]);
+      const hum =Math.round(hourly.relative_humidity_2m[i]);
+      const wnd =Math.round(hourly.wind_speed_10m[i]);
+      const code=hourly.weathercode[i];
+      const pop =(typeof hourly.precipitation_probability?.[i]==='number')? `${hourly.precipitation_probability[i]}%` : '—';
+      out.push(`
+        <div class="hour">
+          <div class="hour-top">
+            <div class="hour-title">\${fmtTime(t)}</div>
+            <div class="hour-icon">\${icon(iconId(code))}</div>
+          </div>
+          <div class="row"><span>Temp.</span><strong>\${temp}°C</strong></div>
+          <div class="row"><span>Humidité</span><strong>\${hum}%</strong></div>
+          <div class="row"><span>Vent</span><strong>\${wnd} km/h</strong></div>
+          <div class="chips">
+            <span class="chip">Pluie: \${pop}</span>
+            <span class="chip">\${desc(code)}</span>
+          </div>
+        </div>
+      `);
+    }
+    hoursEl.innerHTML = out.join('');
+    lastUpd.textContent = `Dernière mise à jour : \${fmtDate(new Date().toISOString(),{dateStyle:'short',timeStyle:'short',timeZone:STATE.tz})}`;
+    setBusy(hoursEl,false);
+  }
+
+  // ========= Graphique SVG (météogramme) =========
+  function renderChartFor(ymd, d){
+    const rect = chartEl.getBoundingClientRect();
+    const H = 260, W = Math.max(320, rect.width || 800), PAD = 36, PADS = {l:44,r:12,t:24,b:30};
+    const { time, temperature_2m, relative_humidity_2m, wind_speed_10m, precipitation_probability } = d.hourly;
+    const xs=[], temps=[], hums=[], winds=[], precs=[];
+    for(let i=0;i<time.length;i++){
+      if(time[i].startsWith(ymd)){
+        xs.push(new Date(time[i]));
+        temps.push(temperature_2m[i]);
+        hums.push(relative_humidity_2m[i]);
+        winds.push(wind_speed_10m[i]);
+        precs.push(precipitation_probability?.[i] ?? 0);
+      }
+    }
+    if(xs.length===0){ chartEl.innerHTML=''; return; }
+
+    // Sunrise/Sunset du jour sélectionné
+    const idxDay = d.daily.time.findIndex(t=>t.startsWith(ymd));
+    const sunrise = idxDay>=0 ? new Date(d.daily.sunrise[idxDay]) : null;
+    const sunset  = idxDay>=0 ? new Date(d.daily.sunset[idxDay])  : null;
+
+    // Scales
